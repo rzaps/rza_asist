@@ -1,4 +1,8 @@
-"""Кастомный компонент Langflow: RZA_Section_Writer (03)."""
+"""Кастомный компонент Langflow: RZA_Section_Writer (03).
+
+Генерирует текст одного раздела ПЗ.
+Принимает контекст от FAISS Context — не ищет сам.
+"""
 
 import sys
 import json
@@ -10,30 +14,35 @@ from langflow.schema.message import Message
 
 class SectionWriterComponent(Component):
     display_name = "03 Section Writer"
-    description = "Генерирует текст одного раздела ПЗ строго по чанкам из базы знаний."
+    description = "Пишет 1 раздел ПЗ из FAISS-контекста. Строго по чанкам, без галлюцинаций."
     icon = "pen"
 
     inputs = [
         MessageTextInput(
             name="section_json",
-            display_name="Пункт плана (JSON)",
-            info='JSON-объект раздела: {"num","title","section_type","sources","forced"}',
+            display_name="← Пункт плана (JSON)",
+            info='{"num","title","section_type"} — от Оркестратора',
         ),
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON из 01)",
-            info="Содержит _tz_snippet внутри",
+            display_name="← Карточка объекта (JSON)",
+            info="От 01 Param Extractor",
+        ),
+        MessageTextInput(
+            name="faiss_context_json",
+            display_name="← FAISS Context (JSON)",
+            info="Результат поиска чанков — подключить сюда FAISS Context",
         ),
         DataInput(
             name="llm_model",
-            display_name="LLM Model",
+            display_name="← LLM Model",
             input_types=["BaseLanguageModel"],
             required=False,
         ),
     ]
 
     outputs = [
-        Output(name="section_output", display_name="Текст раздела", method="run_section", type=Message),
+        Output(name="section_output", display_name="Текст раздела →", method="run_section", type=Message),
     ]
 
     def run_section(self) -> Message:
@@ -53,6 +62,14 @@ class SectionWriterComponent(Component):
             card = card_data.get("card", card_data)
         except (json.JSONDecodeError, TypeError):
             card = {}
+
+        # Вкладываем FAISS-контекст в карточку — section_writer прочитает
+        if self.faiss_context_json:
+            try:
+                faiss_data = json.loads(self.faiss_context_json)
+                card["_faiss_context"] = faiss_data
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         result = write_section(section_item, card)
 

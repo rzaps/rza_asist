@@ -233,29 +233,46 @@ def write_section(
     print(f"📝 [Section_Writer] Раздел {section_num} «{section_title}»")
     print(f"   🔍 Запрос: '{search_query}'")
 
-    # 2. Поиск в двух коллекциях
-    gost_results, _, _ = hybrid_search(
-        search_query,
-        active_collections=["gost"],
-        top_k=top_k_gost,
-    )
+    # 2. Поиск в коллекциях (пропускаем если FAISS-контекст уже передан)
+    pre_provided = card.pop("_faiss_context", None)
 
-    manuals_results, _, _ = hybrid_search(
-        search_query,
-        active_collections=["manuals"],
-        top_k=top_k_manuals,
-    )
+    if pre_provided and pre_provided.get("chunks_found", 0) > 0:
+        # Контекст пришёл от отдельного узла FAISS на canvas
+        print(f"   📡 [Section_Writer] Использую предварительно найденный FAISS-контекст")
+        context_text = pre_provided.get("context_text", "")
+        chunks_found = pre_provided.get("chunks_found", 0)
+        all_results = pre_provided.get("chunks", [])
+        sources = [
+            {
+                "num": c.get("num", i + 1),
+                "collection": c.get("collection", ""),
+                "source": c.get("source", ""),
+                "section": c.get("section", ""),
+                "title": c.get("title", ""),
+                "text_preview": c.get("text", "")[:200],
+            }
+            for i, c in enumerate(all_results)
+        ]
+    else:
+        # Поиск своими силами (если FAISS не подключен на canvas)
+        gost_results, _, _ = hybrid_search(
+            search_query,
+            active_collections=["gost"],
+            top_k=top_k_gost,
+        )
 
-    all_results = (gost_results or []) + (manuals_results or [])
+        manuals_results, _, _ = hybrid_search(
+            search_query,
+            active_collections=["manuals"],
+            top_k=top_k_manuals,
+        )
 
-    # Сортируем по ce_score (Cross-Encoder score)
-    all_results.sort(key=lambda x: x.get("ce_score", 0), reverse=True)
+        all_results = (gost_results or []) + (manuals_results or [])
+        all_results.sort(key=lambda x: x.get("ce_score", 0), reverse=True)
+        all_results = all_results[:6]
 
-    # Берём топ-6 для контекста (чтобы не перегружать промпт)
-    all_results = all_results[:6]
-
-    context_text, sources = _format_chunks_for_writer(all_results)
-    chunks_found = len(all_results)
+        context_text, sources = _format_chunks_for_writer(all_results)
+        chunks_found = len(all_results)
 
     # 3. Если чанков нет — сразу заглушка
     if not all_results or not context_text.strip():

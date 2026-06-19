@@ -1,4 +1,8 @@
-"""Кастомный компонент Langflow: RZA_Plan_Builder (02)."""
+"""Кастомный компонент Langflow: RZA_Plan_Builder (02).
+
+Строит JSON-план ПЗ. Может принимать контекст от FAISS Context (опционально).
+Если FAISS не подключен — сам делает поиск внутри.
+"""
 
 import sys
 import json
@@ -10,25 +14,31 @@ from langflow.schema.message import Message
 
 class PlanBuilderComponent(Component):
     display_name = "02 Plan Builder"
-    description = "Строит JSON-план ПЗ на основе карточки объекта и аналогов из базы."
+    description = "Строит JSON-план ПЗ. Принимает карточку + FAISS-контекст аналогов."
     icon = "list"
 
     inputs = [
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON из 01)",
-            info="JSON-строка из Param Extractor (содержит _tz_snippet внутри)",
+            display_name="← Карточка объекта (JSON из 01)",
+            info="JSON-строка из Param Extractor",
+        ),
+        MessageTextInput(
+            name="faiss_context_json",
+            display_name="← FAISS Context (опционально)",
+            info="Результат поиска аналогов из FAISS Context. Если не подключен — поиск внутри.",
+            required=False,
         ),
         DataInput(
             name="llm_model",
-            display_name="LLM Model",
+            display_name="← LLM Model",
             input_types=["BaseLanguageModel"],
             required=False,
         ),
     ]
 
     outputs = [
-        Output(name="plan_output", display_name="План ПЗ (JSON)", method="run_plan", type=Message),
+        Output(name="plan_output", display_name="План ПЗ (JSON) →", method="run_plan", type=Message),
     ]
 
     def run_plan(self) -> Message:
@@ -43,6 +53,14 @@ class PlanBuilderComponent(Component):
             card = data.get("card", data)
         except (json.JSONDecodeError, TypeError):
             card = {}
+
+        # Если FAISS-контекст подключен — добавляем в карточку
+        if self.faiss_context_json:
+            try:
+                faiss_data = json.loads(self.faiss_context_json)
+                card["_faiss_structures"] = faiss_data.get("chunks", [])
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         result = build_plan(card)
 
