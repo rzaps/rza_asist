@@ -1,9 +1,6 @@
 """05 Docx Assembler — сборка всех разделов в .docx.
 
 Canvas: [04] → [05] → Chat Output
-Вход:  sections_json (Message) ← 04.sections_output
-       card_json (Message)     ← Check1.pass
-Выход: docx_path (Message)      → Chat Output
 """
 
 import sys
@@ -21,6 +18,11 @@ class DocxAssemblerComponent(Component):
 
     inputs = [
         MessageTextInput(
+            name="project_root",
+            display_name="Путь к проекту rza_asist",
+            value="J:\\Documents\\GitHub\\rza_rag",
+        ),
+        MessageTextInput(
             name="sections_json",
             display_name="← Разделы (JSON)",
             info="От 04.sections_output",
@@ -37,7 +39,7 @@ class DocxAssemblerComponent(Component):
     ]
 
     def run_assemble(self) -> Message:
-        root = Path(__file__).resolve().parent.parent
+        root = Path(self.project_root).resolve()
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 

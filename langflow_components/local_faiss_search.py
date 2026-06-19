@@ -21,9 +21,14 @@ class LocalFaissSearch(Component):
 
     inputs = [
         MessageTextInput(
+            name="project_root",
+            display_name="Путь к проекту rza_asist",
+            value="J:\\Documents\\GitHub\\rza_rag",
+        ),
+        MessageTextInput(
             name="search_query",
             display_name="Поисковый запрос",
-            info="Что искать (автоматически заполняется агентом или предыдущим узлом)",
+            info="Что искать",
         ),
         BoolInput(name="search_gost", display_name="ГОСТ / ПУЭ / Приказы", value=True),
         BoolInput(name="search_manuals", display_name="Мануалы (заводы)", value=True),
@@ -37,7 +42,7 @@ class LocalFaissSearch(Component):
 
     # ── Внутренний поиск (общий для обоих выходов) ──
     def _do_search(self, query: str, top_k: int = 6):
-        root_path = Path(__file__).resolve().parent.parent
+        root_path = Path(self.project_root).resolve()
         if str(root_path) not in sys.path:
             sys.path.insert(0, str(root_path))
 

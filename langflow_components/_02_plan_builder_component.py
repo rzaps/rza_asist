@@ -1,10 +1,6 @@
 """02 Plan Builder — построение оглавления ПЗ.
 
 Canvas: Check1 → [02] → Check2
-Вход:  card_json (Message)         ← Check1.pass
-       faiss_context (Message)     ← FAISS.context_output [опционально]
-       llm_model (BaseLanguageModel) ← OpenRouter [опционально]
-Выход: plan_json (Message)          → Check2
 """
 
 import sys
@@ -21,6 +17,11 @@ class PlanBuilderComponent(Component):
     icon = "list"
 
     inputs = [
+        MessageTextInput(
+            name="project_root",
+            display_name="Путь к проекту rza_asist",
+            value="J:\\Documents\\GitHub\\rza_rag",
+        ),
         MessageTextInput(
             name="card_json",
             display_name="← Карточка (JSON)",
@@ -45,7 +46,7 @@ class PlanBuilderComponent(Component):
     ]
 
     def run_plan(self) -> Message:
-        root = Path(__file__).resolve().parent.parent
+        root = Path(self.project_root).resolve()
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
@@ -57,7 +58,6 @@ class PlanBuilderComponent(Component):
         except Exception:
             card = {}
 
-        # FAISS-контекст от отдельного узла (если подключен)
         if self.faiss_context_json:
             try:
                 faiss_data = json.loads(self.faiss_context_json)

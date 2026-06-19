@@ -1,16 +1,6 @@
 """04 Orchestrator — циклическая генерация всех разделов.
 
 Canvas: Check2 → [04] → 05
-Вход:  plan_json (Message)          ← Check2.pass
-       card_json (Message)          ← Check1.pass
-       llm_model (BaseLanguageModel) ← OpenRouter [опционально]
-Выход: sections_json (Message)       → 05
-
-Внутри: для каждого раздела плана:
-  1. Формирует поисковый запрос (маркеры + тема раздела)
-  2. Вызывает hybrid_search() по gost + manuals
-  3. Вызывает write_section() с найденными чанками
-  4. Накапливает результат
 """
 
 import sys
@@ -27,6 +17,11 @@ class OrchestratorComponent(Component):
     icon = "repeat"
 
     inputs = [
+        MessageTextInput(
+            name="project_root",
+            display_name="Путь к проекту rza_asist",
+            value="J:\\Documents\\GitHub\\rza_rag",
+        ),
         MessageTextInput(
             name="plan_json",
             display_name="← План ПЗ (JSON)",
@@ -50,7 +45,7 @@ class OrchestratorComponent(Component):
     ]
 
     def run_orchestrator(self) -> Message:
-        root = Path(__file__).resolve().parent.parent
+        root = Path(self.project_root).resolve()
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
@@ -72,7 +67,7 @@ class OrchestratorComponent(Component):
         for i, section_item in enumerate(plan):
             num = section_item.get("num", str(i + 1))
             title = section_item.get("title", "")
-            print(f"▶ [{i+1}/{len(plan)}] Раздел {num}. {title}", flush=True)
+            print(f"> [{i+1}/{len(plan)}] Раздел {num}. {title}", flush=True)
 
             result = write_section(section_item, card)
             sections.append({

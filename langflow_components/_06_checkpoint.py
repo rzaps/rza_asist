@@ -1,13 +1,7 @@
-"""Кастомный компонент Langflow: Checkpoint (Human-in-the-Loop).
+"""06 Checkpoint — Human-in-the-Loop.
 
-Один компонент → два экземпляра на canvas:
-  Экземпляр 1: после 01 Param Extractor → проверка карточки
-  Экземпляр 2: после 02 Plan Builder → проверка плана
-
-Подключение:
-  data_input ← JSON от предыдущего узла
-  display_output → Chat Output (инженер читает)
-  pass_output → следующий узел (данные едут дальше)
+Два экземпляра: после 01 (карточка) и после 02 (план).
+Display → Chat Output, Pass → следующий компонент.
 """
 
 import json
@@ -17,64 +11,58 @@ from langflow.schema.message import Message
 
 
 class CheckpointComponent(Component):
-    display_name = "🛑 Checkpoint"
-    description = "Точка контроля: показать данные инженеру → пропустить дальше."
+    display_name = "Checkpoint"
+    description = "Точка контроля: показать данные → пропустить дальше."
     icon = "alert-triangle"
 
     inputs = [
         MessageTextInput(
             name="data_json",
             display_name="← Данные (JSON)",
-            info="Что показать инженеру — подключить вывод предыдущего компонента",
+            info="От предыдущего компонента",
         ),
     ]
 
     outputs = [
-        Output(name="display_output", display_name="На экран (Chat Output) →", method="format_display", type=Message),
+        Output(name="display_output", display_name="На экран →", method="format_display", type=Message),
         Output(name="pass_output", display_name="Данные дальше →", method="run_pass", type=Message),
     ]
 
     def run_pass(self) -> Message:
-        """Пропускает данные дальше как есть."""
         return Message(text=self.data_json or "{}")
 
     def format_display(self) -> Message:
-        """Форматирует данные для вывода инженеру."""
         try:
             data = json.loads(self.data_json or "{}")
         except Exception:
-            return Message(text=f"🛑 КОНТРОЛЬНАЯ ТОЧКА\n\n{str(self.data_json)[:1000]}\n\n✅ Если верно — поток продолжается\n❌ Если нет — Stop на canvas")
+            return Message(text=f"🛑 КОНТРОЛЬ\n\n{str(self.data_json)[:800]}\n\n✅ Ок → идёт дальше | ❌ → Stop")
 
-        lines = ["```", "🛑 КОНТРОЛЬНАЯ ТОЧКА", "=" * 40]
+        lines = ["🛑 КОНТРОЛЬНАЯ ТОЧКА", "=" * 36]
 
         card = data.get("card", {})
-        if card and card.get("object_name"):
-            lines.append(f"Объект: {card.get('object_name', '?')}")
-            lines.append(f"ВН: {card.get('voltage_hv', '?')}  |  Схема: {card.get('scheme_hv', '?')}")
+        if card.get("object_name"):
+            lines.append(f"Объект: {card['object_name']}")
+            lines.append(f"ВН: {card.get('voltage_hv','?')} | Схема: {card.get('scheme_hv','?')}")
             tr = card.get("transformers", [])
-            if tr:
-                for t in tr:
-                    lines.append(f"Трансформатор: {t.get('qty','?')}×{t.get('power','?')}")
+            for t in tr:
+                lines.append(f"Тр-р: {t.get('qty','?')}x{t.get('power','?')}")
             if card.get("technology"):
                 lines.append(f"Технология: {card['technology']}")
             sn = card.get("special_nodes", [])
             if sn:
                 lines.append(f"Особые узлы: {', '.join(sn)}")
-            lines.append(f"Валидна: {'✅' if data.get('valid') else '❌ (не все поля)'}")
+            lines.append(f"Валидна: {'✅' if data.get('valid') else '❌'}")
 
         plan = data.get("plan", [])
         if plan:
             lines.append("")
-            lines.append("План разделов ПЗ:")
+            lines.append("План разделов:")
             for item in plan:
-                num = item.get("num", "?")
-                title = item.get("title", "")
-                forced = " [ПРИНУД.]" if item.get("forced") else ""
-                lines.append(f"  {num}. {title}{forced}")
+                n = item.get("num", "?")
+                t = item.get("title", "")
+                f = " [ПРИНУД.]" if item.get("forced") else ""
+                lines.append(f"  {n}. {t}{f}")
 
         lines.append("")
-        lines.append("✅ Если верно — идёт дальше автоматически")
-        lines.append("❌ Если нет — нажми Stop на canvas'е")
-        lines.append("```")
-
+        lines.append("✅ Верно → продолжается | ❌ → Stop на canvas")
         return Message(text="\n".join(lines))

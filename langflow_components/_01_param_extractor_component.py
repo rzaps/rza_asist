@@ -1,9 +1,6 @@
 """01 Param Extractor — извлечение маркеров из ТЗ.
 
 Canvas: Chat Input → [01] → Check1
-Вход:  tz_text (Message)        ← Chat Input
-       llm_model (BaseLanguageModel) ← OpenRouter Router [опционально]
-Выход: card_json (Message)       → Check1
 """
 
 import sys
@@ -20,6 +17,11 @@ class ParamExtractorComponent(Component):
     icon = "search"
 
     inputs = [
+        MessageTextInput(
+            name="project_root",
+            display_name="Путь к проекту rza_asist",
+            value="J:\\Documents\\GitHub\\rza_rag",
+        ),
         MessageTextInput(
             name="tz_text",
             display_name="← ТЗ (текст)",
@@ -38,7 +40,7 @@ class ParamExtractorComponent(Component):
     ]
 
     def run_extract(self) -> Message:
-        root = Path(__file__).resolve().parent.parent
+        root = Path(self.project_root).resolve()
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
@@ -48,7 +50,7 @@ class ParamExtractorComponent(Component):
         result = extract_params(tz)
 
         card = result["card"]
-        card["_tz_snippet"] = tz[:3000]  # фрагмент ТЗ едет дальше внутри карточки
+        card["_tz_snippet"] = tz[:3000]
 
         return Message(text=json.dumps({
             "card": card,
