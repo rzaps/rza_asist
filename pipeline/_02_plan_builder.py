@@ -158,16 +158,15 @@ def _extract_structures_from_chunks(search_results: list) -> list[dict]:
 
 def build_plan(
     card: dict,
-    tz_text: Optional[str] = None,
     model: Optional[str] = None,
     top_k_sources: int = 8,
 ) -> dict:
     """
     Строит оглавление ПЗ на основе карточки объекта и поиска аналогов.
+    Фрагмент ТЗ читается из card["_tz_snippet"] (вложен в Param Extractor).
 
     Аргументы:
         card: карточка объекта из Param_Extractor.
-        tz_text: исходный текст ТЗ (опционально, для доп. контекста).
         model: модель OpenRouter.
         top_k_sources: сколько чанков проектов искать в базе.
 
@@ -206,9 +205,10 @@ def build_plan(
     # 2. Формируем промпт для LLM
     card_json = json.dumps(card, ensure_ascii=False, indent=2)
 
+    tz_snippet = card.pop("_tz_snippet", "")
     tz_context = ""
-    if tz_text:
-        tz_context = f"\n\n=== ФРАГМЕНТ ТЗ (для контекста) ===\n{tz_text[:3000]}\n"
+    if tz_snippet:
+        tz_context = f"\n\n=== ФРАГМЕНТ ТЗ (для контекста) ===\n{tz_snippet[:3000]}\n"
 
     user_prompt = (
         "Построй план (оглавление) Пояснительной Записки стадии ОТР для следующего объекта.\n\n"

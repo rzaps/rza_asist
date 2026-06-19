@@ -103,6 +103,7 @@ def run_pipeline(
 ) -> PipelineState:
     """
     Запускает полный пайплайн генерации ПЗ.
+    tz_text нужен только для Param Extractor — дальше едет в card["_tz_snippet"].
 
     Аргументы:
         tz_text: текст Технического задания.
@@ -152,7 +153,6 @@ def run_pipeline(
 
     plan_result = build_plan(
         state.card,
-        tz_text=tz_text,
         model=model,
     )
     state.plan = plan_result["plan"]
@@ -187,7 +187,6 @@ def run_pipeline(
             section_item,
             state.card,
             model=model,
-            tz_text=tz_text,
         )
 
         state.sections.append(result)

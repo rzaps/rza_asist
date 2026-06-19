@@ -199,10 +199,10 @@ def write_section(
     model: Optional[str] = None,
     top_k_gost: int = 5,
     top_k_manuals: int = 3,
-    tz_text: Optional[str] = None,
 ) -> dict:
     """
     Генерирует текст одного раздела ПЗ.
+    Фрагмент ТЗ читается из card["_tz_snippet"] (вложен в Param Extractor).
 
     Аргументы:
         section_item: пункт плана {"num", "title", "section_type", "sources", "forced"}.
@@ -210,7 +210,6 @@ def write_section(
         model: модель OpenRouter.
         top_k_gost: сколько чанков нормативки искать.
         top_k_manuals: сколько чанков мануалов искать.
-        tz_text: фрагмент ТЗ (опционально, для дополнительного контекста).
 
     Возвращает:
         {
@@ -275,9 +274,10 @@ def write_section(
     # 4. Собираем промпт для LLM
     card_summary = _format_card_summary(card)
 
+    tz_snippet = card.pop("_tz_snippet", "")
     tz_context = ""
-    if tz_text:
-        tz_context = f"\n\n=== ФРАГМЕНТ ТЗ ===\n{tz_text[:2000]}\n"
+    if tz_snippet:
+        tz_context = f"\n\n=== ФРАГМЕНТ ТЗ ===\n{tz_snippet[:2000]}\n"
 
     forced_note = ""
     if forced:

@@ -40,10 +40,13 @@ class ParamExtractorComponent(Component):
         tz = self.tz_text or ""
         result = extract_params(tz)
 
-        # Сериализуем карточку в JSON-строку для передачи между компонентами
+        # Вкладываем фрагмент ТЗ в карточку — дальше по пайплайну tz_text не передаётся отдельно
         import json
+        card = result["card"]
+        card["_tz_snippet"] = tz[:3000] if tz else ""
+
         payload = json.dumps({
-            "card": result["card"],
+            "card": card,
             "valid": result["valid"],
             "problems": result["problems"],
         }, ensure_ascii=False)

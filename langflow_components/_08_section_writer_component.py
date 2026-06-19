@@ -21,12 +21,8 @@ class SectionWriterComponent(Component):
         ),
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON)",
-        ),
-        MessageTextInput(
-            name="tz_text",
-            display_name="Текст ТЗ (опционально)",
-            required=False,
+            display_name="Карточка объекта (JSON из 01)",
+            info="Содержит _tz_snippet внутри",
         ),
         DataInput(
             name="llm_model",
@@ -58,9 +54,7 @@ class SectionWriterComponent(Component):
         except (json.JSONDecodeError, TypeError):
             card = {}
 
-        tz = self.tz_text or ""
-
-        result = write_section(section_item, card, tz_text=tz if tz else None)
+        result = write_section(section_item, card)
 
         payload = json.dumps({
             "section_num": result["section_num"],

@@ -21,17 +21,13 @@ class OrchestratorComponent(Component):
     inputs = [
         MessageTextInput(
             name="plan_json",
-            display_name="План ПЗ (JSON-массив)",
+            display_name="План ПЗ (JSON-массив из 02)",
             info="JSON-массив разделов из Plan Builder",
         ),
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON)",
-        ),
-        MessageTextInput(
-            name="tz_text",
-            display_name="Текст ТЗ",
-            required=False,
+            display_name="Карточка объекта (JSON из 01)",
+            info="Содержит _tz_snippet внутри",
         ),
         DataInput(
             name="llm_model",
@@ -68,11 +64,9 @@ class OrchestratorComponent(Component):
         except (json.JSONDecodeError, TypeError):
             card = {}
 
-        tz = self.tz_text or ""
-
         sections = []
         for section_item in plan:
-            result = write_section(section_item, card, tz_text=tz if tz else None)
+            result = write_section(section_item, card)
             sections.append({
                 "section_num": result["section_num"],
                 "section_title": result["section_title"],
