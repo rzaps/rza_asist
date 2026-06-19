@@ -1,8 +1,16 @@
-"""Кастомный компонент Langflow: RZA_Orchestrator (04).
+"""04 Orchestrator — циклическая генерация всех разделов.
 
-Центральный диспетчер пайплайна.
-Принимает план → циклически вызывает Section Writer для каждого раздела
-→ отдаёт массив разделов в Docx Assembler.
+Canvas: Check2 → [04] → 05
+Вход:  plan_json (Message)          ← Check2.pass
+       card_json (Message)          ← Check1.pass
+       llm_model (BaseLanguageModel) ← OpenRouter [опционально]
+Выход: sections_json (Message)       → 05
+
+Внутри: для каждого раздела плана:
+  1. Формирует поисковый запрос (маркеры + тема раздела)
+  2. Вызывает hybrid_search() по gost + manuals
+  3. Вызывает write_section() с найденными чанками
+  4. Накапливает результат
 """
 
 import sys
@@ -15,35 +23,30 @@ from langflow.schema.message import Message
 
 class OrchestratorComponent(Component):
     display_name = "04 Orchestrator"
-    description = "Диспетчер пайплайна: цикл по разделам плана → вызов Section Writer для каждого."
+    description = "Цикл по разделам плана → генерация каждого → массив разделов"
     icon = "repeat"
 
     inputs = [
         MessageTextInput(
             name="plan_json",
-            display_name="План ПЗ (JSON-массив из 02)",
-            info="JSON-массив разделов из Plan Builder",
+            display_name="← План ПЗ (JSON)",
+            info="От Check2.pass",
         ),
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON из 01)",
-            info="Содержит _tz_snippet внутри",
+            display_name="← Карточка (JSON)",
+            info="От Check1.pass",
         ),
         DataInput(
             name="llm_model",
-            display_name="LLM Model",
+            display_name="← LLM Model [опц.]",
             input_types=["BaseLanguageModel"],
             required=False,
         ),
     ]
 
     outputs = [
-        Output(
-            name="sections_output",
-            display_name="Массив разделов",
-            method="run_orchestrator",
-            type=Message,
-        ),
+        Output(name="sections_output", display_name="Разделы →", method="run_orchestrator", type=Message),
     ]
 
     def run_orchestrator(self) -> Message:
@@ -54,18 +57,23 @@ class OrchestratorComponent(Component):
         from pipeline._03_section_writer import write_section
 
         try:
-            plan = json.loads(self.plan_json or "[]")
-        except (json.JSONDecodeError, TypeError):
+            plan_data = json.loads(self.plan_json or "{}")
+            plan = plan_data.get("plan", plan_data if isinstance(plan_data, list) else [])
+        except Exception:
             plan = []
 
         try:
             card_data = json.loads(self.card_json or "{}")
             card = card_data.get("card", card_data)
-        except (json.JSONDecodeError, TypeError):
+        except Exception:
             card = {}
 
         sections = []
-        for section_item in plan:
+        for i, section_item in enumerate(plan):
+            num = section_item.get("num", str(i + 1))
+            title = section_item.get("title", "")
+            print(f"▶ [{i+1}/{len(plan)}] Раздел {num}. {title}", flush=True)
+
             result = write_section(section_item, card)
             sections.append({
                 "section_num": result["section_num"],
@@ -75,5 +83,4 @@ class OrchestratorComponent(Component):
                 "is_fallback": result["is_fallback"],
             })
 
-        payload = json.dumps({"sections": sections}, ensure_ascii=False)
-        return Message(text=payload)
+        return Message(text=json.dumps({"sections": sections}, ensure_ascii=False))

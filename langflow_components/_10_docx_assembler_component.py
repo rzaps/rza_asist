@@ -1,6 +1,9 @@
-"""Кастомный компонент Langflow: RZA_Docx_Assembler (05).
+"""05 Docx Assembler — сборка всех разделов в .docx.
 
-Собирает все разделы в документ .docx с форматированием по ГОСТ.
+Canvas: [04] → [05] → Chat Output
+Вход:  sections_json (Message) ← 04.sections_output
+       card_json (Message)     ← Check1.pass
+Выход: docx_path (Message)      → Chat Output
 """
 
 import sys
@@ -13,28 +16,24 @@ from langflow.schema.message import Message
 
 class DocxAssemblerComponent(Component):
     display_name = "05 Docx Assembler"
-    description = "Сборка всех разделов в .docx: титул, оглавление, форматирование ГОСТ."
+    description = "Разделы + карточка → файл .docx (ГОСТ)"
     icon = "file-text"
 
     inputs = [
         MessageTextInput(
             name="sections_json",
-            display_name="Массив разделов (JSON)",
-            info='JSON: {"sections": [...]} — от Оркестратора',
+            display_name="← Разделы (JSON)",
+            info="От 04.sections_output",
         ),
         MessageTextInput(
             name="card_json",
-            display_name="Карточка объекта (JSON)",
+            display_name="← Карточка (JSON)",
+            info="От Check1.pass",
         ),
     ]
 
     outputs = [
-        Output(
-            name="docx_path_output",
-            display_name="Путь к .docx",
-            method="run_assemble",
-            type=Message,
-        ),
+        Output(name="docx_output", display_name="Путь к .docx →", method="run_assemble", type=Message),
     ]
 
     def run_assemble(self) -> Message:
@@ -46,15 +45,15 @@ class DocxAssemblerComponent(Component):
         from pipeline._04_orchestrator import PipelineState
 
         try:
-            sections_data = json.loads(self.sections_json or "{}")
-            sections = sections_data.get("sections", [])
-        except (json.JSONDecodeError, TypeError):
+            sec_data = json.loads(self.sections_json or "{}")
+            sections = sec_data.get("sections", [])
+        except Exception:
             sections = []
 
         try:
             card_data = json.loads(self.card_json or "{}")
             card = card_data.get("card", card_data)
-        except (json.JSONDecodeError, TypeError):
+        except Exception:
             card = {}
 
         state = PipelineState()
@@ -63,4 +62,4 @@ class DocxAssemblerComponent(Component):
         state.status = "done"
 
         output_path = assemble_docx(state)
-        return Message(text=f"Документ сохранён: {output_path}")
+        return Message(text=f"✅ Документ сохранён: {output_path}")
