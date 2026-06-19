@@ -13,9 +13,9 @@ from typing import Optional, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline.param_extractor import extract_params, format_card_for_review
-from pipeline.plan_builder import build_plan, format_plan_for_review
-from pipeline.section_writer import write_section, format_section_for_display
+from pipeline._01_param_extractor import extract_params, format_card_for_review
+from pipeline._02_plan_builder import build_plan, format_plan_for_review
+from pipeline._03_section_writer import write_section, format_section_for_display
 
 
 # ============================================================
