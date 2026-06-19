@@ -1,112 +1,133 @@
-"""Кастомный компонент Langflow: гибридный поиск по базе РЗА (FAISS + BM25 + Reranker)."""
+"""Кастомный компонент Langflow: гибридный поиск по базе РЗА (FAISS + BM25 + Reranker).
+
+Два выхода:
+- tool_output (Tool) — для Langchain-агентов (rza_agent)
+- context_output (Message) — JSON с чанками, для прямого подключения к Writer/Planner
+"""
 
 import sys
+import json
 from pathlib import Path
 from langflow.custom import Component
 from langflow.io import Output, MessageTextInput, BoolInput
+from langflow.schema.message import Message
 from langchain.tools import Tool
 
 
 class LocalFaissSearch(Component):
-    display_name = "Локальный Поиск FAISS РЗА"
-    description = "Инструмент точного гибридного поиска (FAISS + BM25 + Реранкер) по базам РЗА."
-    icon = "FAISS"
+    display_name = "FAISS Search"
+    description = "Гибридный поиск FAISS + BM25 + Reranker. Tool для агента + Message для пайплайна."
+    icon = "database"
 
     inputs = [
         MessageTextInput(
-            name="project_root",
-            display_name="Путь к корню проекта (rza_rag)",
-            value="J:\\Documents\\GitHub\\rza_rag",
+            name="search_query",
+            display_name="Поисковый запрос",
+            info="Что искать (автоматически заполняется агентом или предыдущим узлом)",
         ),
-        BoolInput(name="search_gost", display_name="Искать в ГОСТ / ПУЭ", value=True),
-        BoolInput(name="search_manuals", display_name="Искать в Мануалах (заводы)", value=True),
-        BoolInput(name="search_projects", display_name="Искать в старых Проектах", value=True),
+        BoolInput(name="search_gost", display_name="ГОСТ / ПУЭ / Приказы", value=True),
+        BoolInput(name="search_manuals", display_name="Мануалы (заводы)", value=True),
+        BoolInput(name="search_projects", display_name="Проекты (аналоги)", value=True),
     ]
 
     outputs = [
-        Output(name="tool_output", display_name="As Tool", method="build_tool", type=Tool)
+        Output(name="tool_output", display_name="As Tool (для агента)", method="build_tool", type=Tool),
+        Output(name="context_output", display_name="As Context (JSON)", method="run_context_search", type=Message),
     ]
 
-    def run_direct_search(self, query: str) -> str:
-        root_path = Path(self.project_root).resolve()
-        venv_packages = root_path / "venv" / "Lib" / "site-packages"
-
+    # ── Внутренний поиск (общий для обоих выходов) ──
+    def _do_search(self, query: str, top_k: int = 6):
+        root_path = Path(__file__).resolve().parent.parent
         if str(root_path) not in sys.path:
             sys.path.insert(0, str(root_path))
-        if venv_packages.exists() and str(venv_packages) not in sys.path:
-            sys.path.insert(0, str(venv_packages))
 
-        print(f"\n📢 [LANGFLOW] Входящий запрос к поиску от Агента: '{query}'",
-              file=sys.__stdout__, flush=True)
+        from app.search import hybrid_search
+        import app.search
 
+        absolute_indexes_dir = root_path / "data" / "processed" / "indexes"
+        app.search.INDEXES_DIR = absolute_indexes_dir
+
+        active = []
+        if self.search_gost: active.append("gost")
+        if self.search_manuals: active.append("manuals")
+        if self.search_projects: active.append("projects_docx_clean")
+
+        if not active:
+            return []
+
+        return hybrid_search(query.strip(), active_collections=active, top_k=top_k)
+
+    # ── Выход 1: Tool (для агента) ──
+    def run_direct_search(self, query: str) -> str:
         try:
-            from app.search import hybrid_search
-            import app.search
-
-            absolute_indexes_dir = root_path / "data" / "processed" / "indexes"
-            app.search.INDEXES_DIR = absolute_indexes_dir
-
-            active_collections = []
-            if self.search_gost:
-                active_collections.append("gost")
-            if self.search_manuals:
-                active_collections.append("manuals")
-            if self.search_projects:
-                active_collections.append("projects")
-
-            if not active_collections:
-                return "Ошибка: В настройках компонента поиска не выбрана ни одна коллекция."
-
-            search_query = query.strip()
-
-            results, _, _ = hybrid_search(
-                search_query, active_collections=active_collections, top_k=4
-            )
-            print(f"📊 [LANGFLOW] Найдено чанков после реранкинга: {len(results)}",
-                  file=sys.__stdout__, flush=True)
-
+            results, _, _ = self._do_search(query, top_k=4)
             if not results:
                 return "В локальной базе знаний ничего не найдено."
 
-            formatted_chunks = []
+            parts = []
             for i, chunk in enumerate(results, 1):
                 meta = chunk.get("metadata", {})
-                file_name = meta.get("source", meta.get("file_name", "Неизвестный файл"))
+                src = meta.get("source", "?")
                 page = meta.get("page", "?")
-                section = meta.get("section", "Не указан")
+                section = meta.get("section", "—")
                 title = meta.get("title", "")
-
-                header_title = f" — {title}" if title else ""
-                chunk_text = (
+                header = f" — {title}" if title else ""
+                parts.append(
                     f"--- ФРАГМЕНТ №{i} ---\n"
                     f"Коллекция: {chunk['collection']}\n"
-                    f"Документ: {file_name} (Страница: {page})\n"
-                    f"Раздел: {section}{header_title}\n"
-                    f"Текст фрагмента:\n{chunk['text']}\n"
+                    f"Документ: {src} (стр. {page})\n"
+                    f"Раздел: {section}{header}\n"
+                    f"Текст:\n{chunk['text']}\n"
                 )
-                formatted_chunks.append(chunk_text)
-
-            return "\n".join(formatted_chunks)
-
+            return "\n".join(parts)
         except Exception as e:
-            import traceback
-            print(
-                f"❌ [LANGFLOW COMPONENT ERROR] Сбой внутри LocalFaissSearch:\n"
-                f"{traceback.format_exc()}",
-                file=sys.__stdout__, flush=True,
-            )
-            return (
-                "[ОШИБКА БАЗЫ ДАННЫХ] Не удалось выполнить локальный поиск РЗА "
-                f"из-за внутреннего сбоя. Описание: {str(e)}"
-            )
+            return f"[ОШИБКА БД] {e}"
 
     def build_tool(self) -> Tool:
         return Tool(
             name="search_rza_knowledge_base",
             description=(
-                "Используй этот инструмент ОБЯЗАТЕЛЬНО всегда для поиска конкретных "
-                "примеров разделов ПЗ, структуры проектов, нормативных требований ГОСТ, "
-                "СТО или описаний логики под конкретные схемы подстанций (мостик, 110-4Н и др.)."
+                "Поиск по базе знаний РЗА: примеры разделов ПЗ, структуры проектов, "
+                "нормативные требования ГОСТ, СТО, описания логики схем подстанций."
             ),
             func=self.run_direct_search,
         )
+
+    # ── Выход 2: Message (для пайплайна) ──
+    def run_context_search(self) -> Message:
+        query = (self.search_query or "").strip()
+        if not query:
+            return Message(text=json.dumps({"chunks": [], "context_text": "", "search_query": ""}))
+
+        try:
+            results, _, _ = self._do_search(query, top_k=6)
+        except Exception as e:
+            return Message(text=json.dumps({"chunks": [], "context_text": "", "error": str(e)}))
+
+        chunks = []
+        context_parts = []
+        for i, chunk in enumerate(results, 1):
+            meta = chunk.get("metadata", {})
+            source = meta.get("source", "?")
+            section = meta.get("section", "")
+            title = meta.get("title", "")
+            text = chunk.get("text", "")
+            coll = chunk.get("collection", "")
+
+            header = f"[{i}] {coll} | {source}"
+            if section: header += f" | Раздел {section}"
+            if title: header += f" — {title}"
+            context_parts.append(f"{header}\n{text}")
+
+            chunks.append({
+                "num": i, "collection": coll, "source": source,
+                "section": section, "title": title,
+                "text": text[:500], "ce_score": chunk.get("ce_score"),
+            })
+
+        return Message(text=json.dumps({
+            "chunks": chunks,
+            "context_text": "\n\n---\n\n".join(context_parts),
+            "chunks_found": len(chunks),
+            "search_query": query,
+        }, ensure_ascii=False))
